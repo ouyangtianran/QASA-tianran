@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
+
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+*.pt
+*.pth
+*.tar
+*.log
+train_movi_paths.json

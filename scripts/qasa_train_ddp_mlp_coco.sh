@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$PROJECT_ROOT"
+
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-4,5,6,7}"
+NPROC_PER_NODE="${NPROC_PER_NODE:-4}"
+MASTER_PORT="${MASTER_PORT:-29507}"
+DATA_PATH="${DATA_PATH:-./data/COCO2017}"
+LOG_ROOT="${LOG_ROOT:-./logs/qasa/coco}"
+mkdir -p "$LOG_ROOT/run_logs"
+LOG_FILE="$LOG_ROOT/run_logs/train_$(date +%y%m%d-%H%M%S).log"
+
+nohup torchrun \
+  --nnodes=1 \
+  --nproc_per_node="$NPROC_PER_NODE" \
+  --master_port="$MASTER_PORT" \
+  qasa_train_ddp.py \
+  --dataset coco \
+  --data_path "$DATA_PATH" \
+  --split train \
+  --epochs 100 \
+  --batch_size 32 \
+  --image_size 224 \
+  --val_image_size 224 \
+  --val_mask_size 320 \
+  --num_slots 33 \
+  --train_permutations random \
+  --eval_permutations all \
+  --dec_type mlp \
+  --use_conditional_slot_pruning \
+  --gate_eps 1e-8 \
+  --gate_warmup 5 \
+  --cov_rho 0.8 \
+  --cov_tau 0.5 \
+  --cov_novelty_alpha 0.3 \
+  --log_path "$LOG_ROOT/teacher" \
+  >"$LOG_FILE" 2>&1 &
+
+echo "Training started: pid=$! log=$LOG_FILE"

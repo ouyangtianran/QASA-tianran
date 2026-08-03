@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+/set_prediction.zip
 .pytest_cache/
 .ruff_cache/
 .idea/

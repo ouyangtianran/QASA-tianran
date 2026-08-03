@@ -31,9 +31,8 @@ nohup torchrun \
   --gate_layers all \
   --gate_warmup 10 \
   --cov_rho 0.8 \
-  --cov_tau 0.4 \
+  --cov_tau 0.5 \
   --cov_novelty_alpha 0.3 \
-  --which_encoder dinov2_vits14 \
   --num_workers 8 \
   --log_path "$LOG_ROOT/teacher" \
   >"$LOG_FILE" 2>&1 &

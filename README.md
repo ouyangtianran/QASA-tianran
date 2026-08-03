@@ -14,7 +14,9 @@ conda activate qasa
 ## Datasets
 
 Please follow the [SPOT repository](https://github.com/gkakogeorgiou/spot) for
-dataset downloads and directory structures.
+dataset downloads and directory structures. QASA uses the same pretrained
+DINO/DINOv2 backbones as SPOT; they are downloaded automatically by
+`torch.hub` on first use.
 
 ## Training
 
@@ -43,6 +45,18 @@ bash scripts/qasa_eval_movi.sh
 DATA_PATH=/path/to/VOCdevkit/VOC2012 \
 CHECKPOINT_PATH=/path/to/checkpoint.pt.tar \
 bash scripts/qasa_eval_voc.sh
+```
+
+## Set Prediction
+
+This freezes a trained QASA model, trains a COCO property probe on its active
+slots, and evaluates the best probe on COCO val2017.
+
+```bash
+DATA_PATH=/path/to/COCO2017 \
+QASA_CHECKPOINT_PATH=/path/to/checkpoint.pt.tar \
+COV_TAU=0.5 \
+bash set_prediction/train.sh
 ```
 
 ## Acknowledgements

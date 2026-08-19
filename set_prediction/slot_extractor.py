@@ -26,11 +26,6 @@ ARCH_DEFAULTS: Dict[str, Any] = {
     "truncate": "none",
     "init_method": None,
     "skip_norm": False,
-    "use_conditional_slot_pruning": True,
-    "cov_rho": 0.8,
-    "cov_tau": 0.5,
-    "cov_kmin": 2,
-    "cov_novelty_alpha": None,
 }
 
 ARCH_KEYS = tuple(ARCH_DEFAULTS)
@@ -38,68 +33,6 @@ ENCODER_DIMS = {
     "dino_vitb16": 768,
     "dinov2_vits14": 384,
 }
-
-
-def build_active_slot_mask(
-    attention: torch.Tensor,
-    cov_rho: float,
-    cov_tau: float,
-    cov_kmin: int,
-    cov_novelty_alpha: Optional[float],
-) -> torch.Tensor:
-    """Apply the same quality-guided slot selection used by QASA."""
-    with torch.no_grad():
-        attention = attention.detach()
-        attention = attention / (attention.sum(dim=-1, keepdim=True) + 1e-6)
-        batch_size, num_tokens, num_slots = attention.shape
-        winners = attention.argmax(dim=-1)
-        winner_weights = attention.gather(-1, winners.unsqueeze(-1)).squeeze(-1)
-        winner_mass = torch.zeros(
-            batch_size,
-            num_slots,
-            device=attention.device,
-            dtype=attention.dtype,
-        )
-        winner_mass.scatter_add_(1, winners, winner_weights)
-        quality = winner_mass / (attention.sum(dim=1) + 1e-6)
-        active_mask = torch.zeros(
-            batch_size,
-            num_slots,
-            device=attention.device,
-            dtype=torch.bool,
-        )
-
-        for batch_index in range(batch_size):
-            sample_attention = attention[batch_index]
-            order = torch.argsort(quality[batch_index], descending=True)
-            keep = min(max(int(cov_kmin), 1), num_slots)
-            active_mask[batch_index, order[:keep]] = True
-
-            def coverage(mask: torch.Tensor) -> torch.Tensor:
-                covered_mass = sample_attention[:, mask].sum(dim=1)
-                return covered_mass >= cov_tau
-
-            covered = coverage(active_mask[batch_index])
-            covered_fraction = covered.float().mean().item()
-            index = keep
-            while covered_fraction < cov_rho and index < num_slots:
-                slot_index = int(order[index])
-                index += 1
-
-                if cov_novelty_alpha is not None:
-                    total_mass = sample_attention[:, slot_index].sum()
-                    if total_mass <= 1e-6:
-                        continue
-                    covered_mass = sample_attention[covered, slot_index].sum()
-                    novelty = 1.0 - (covered_mass / (total_mass + 1e-6)).item()
-                    if novelty < cov_novelty_alpha:
-                        continue
-
-                active_mask[batch_index, slot_index] = True
-                covered = coverage(active_mask[batch_index])
-                covered_fraction = covered.float().mean().item()
-
-        return active_mask
 
 
 class QASASlotExtractor(nn.Module):
@@ -110,11 +43,6 @@ class QASASlotExtractor(nn.Module):
         self.which_encoder = config.which_encoder
         self.encoder_final_norm = bool(config.encoder_final_norm)
         self.skip_norm = bool(config.skip_norm)
-        self.use_conditional_slot_pruning = bool(config.use_conditional_slot_pruning)
-        self.cov_rho = float(config.cov_rho)
-        self.cov_tau = float(config.cov_tau)
-        self.cov_kmin = int(config.cov_kmin)
-        self.cov_novelty_alpha = config.cov_novelty_alpha
 
     def forward_encoder(self, image: torch.Tensor) -> torch.Tensor:
         self.encoder.eval()
@@ -131,22 +59,10 @@ class QASASlotExtractor(nn.Module):
             encoded = self.encoder.norm(encoded)
         return encoded[:, 1:]
 
-    def forward(self, image: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
         encoded = self.forward_encoder(image)
-        slots, attention, _, _ = self.slot_attn(encoded, self.skip_norm)
-        if self.use_conditional_slot_pruning:
-            active_mask = build_active_slot_mask(
-                attention,
-                cov_rho=self.cov_rho,
-                cov_tau=self.cov_tau,
-                cov_kmin=self.cov_kmin,
-                cov_novelty_alpha=self.cov_novelty_alpha,
-            )
-        else:
-            active_mask = torch.ones(
-                slots.shape[:2], device=slots.device, dtype=torch.bool
-            )
-        return slots, active_mask
+        slots, _, _, _ = self.slot_attn(encoded, self.skip_norm)
+        return slots
 
 
 def add_slot_extractor_args(
@@ -178,15 +94,6 @@ def add_slot_extractor_args(
     )
     parser.add_argument("--encoder_final_norm", action="store_true", default=None)
     parser.add_argument("--skip_norm", action="store_true", default=None)
-    parser.add_argument(
-        "--use_conditional_slot_pruning",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-    )
-    parser.add_argument("--cov_rho", type=float, default=None)
-    parser.add_argument("--cov_tau", type=float, default=None)
-    parser.add_argument("--cov_kmin", type=int, default=None)
-    parser.add_argument("--cov_novelty_alpha", type=float, default=None)
 
 
 def _namespace_from_mapping(mapping: Mapping[str, Any]) -> SimpleNamespace:

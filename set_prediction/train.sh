@@ -24,10 +24,6 @@ ARGS=(
   --num_workers "${NUM_WORKERS:-4}"
   --probe_type "${PROBE_TYPE:-linear}"
   --max_steps "${MAX_STEPS:-15000}"
-  --cov_rho "${COV_RHO:-0.8}"
-  --cov_tau "${COV_TAU:-0.5}"
-  --cov_kmin "${COV_KMIN:-2}"
-  --cov_novelty_alpha "${COV_NOVELTY_ALPHA:-0.3}"
   --out "$OUTPUT_PATH"
 )
 

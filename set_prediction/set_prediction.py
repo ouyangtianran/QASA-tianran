@@ -336,7 +336,6 @@ def hungarian_match_and_loss(
 def prepare_sample(
     class_logits: torch.Tensor,
     predicted_xy: torch.Tensor,
-    active_mask: torch.Tensor,
     target: Dict[str, torch.Tensor],
     mean_xy: torch.Tensor,
     std_xy: torch.Tensor,
@@ -345,8 +344,8 @@ def prepare_sample(
     target_classes = target["classes"].to(device)
     target_xy = target["coords"].to(device)
     return (
-        class_logits[active_mask],
-        predicted_xy[active_mask],
+        class_logits,
+        predicted_xy,
         target_classes,
         target_xy,
         (target_xy - mean_xy) / std_xy,
@@ -372,14 +371,13 @@ def evaluate_metrics(slot_model, probe, loader, mean_xy, std_xy, device):
 
     for images, targets in loader:
         images = images.to(device, non_blocking=True)
-        slots, active_masks = slot_model(images)
+        slots = slot_model(images)
         batch_class_logits, batch_xy = probe(slots)
 
         for index, target in enumerate(targets):
             sample = prepare_sample(
                 batch_class_logits[index],
                 batch_xy[index],
-                active_masks[index],
                 target,
                 mean_xy,
                 std_xy,
@@ -394,7 +392,7 @@ def evaluate_metrics(slot_model, probe, loader, mean_xy, std_xy, device):
             top1 = matched_logits.argmax(dim=-1)
             top5 = torch.topk(matched_logits, k=5, dim=-1).indices
 
-            for class_index in target_classes.tolist():
+            for class_index in matched_classes.tolist():
                 totals[class_index] += 1
             for item, class_index in enumerate(matched_classes.tolist()):
                 top1_correct[class_index] += int(top1[item].item() == class_index)
@@ -440,13 +438,12 @@ def evaluate_loss(slot_model, probe, loader, mean_xy, std_xy, device):
     sample_count = 0
     for images, targets in loader:
         images = images.to(device, non_blocking=True)
-        slots, active_masks = slot_model(images)
+        slots = slot_model(images)
         batch_class_logits, batch_xy = probe(slots)
         for index, target in enumerate(targets):
             sample = prepare_sample(
                 batch_class_logits[index],
                 batch_xy[index],
-                active_masks[index],
                 target,
                 mean_xy,
                 std_xy,
@@ -491,7 +488,7 @@ def train_probe(
         images = images.to(device, non_blocking=True)
         optimizer.param_groups[0]["lr"] = learning_rate(step)
         with torch.no_grad():
-            slots, active_masks = slot_model(images)
+            slots = slot_model(images)
         batch_class_logits, batch_xy = probe(slots)
 
         losses = []
@@ -499,7 +496,6 @@ def train_probe(
             sample = prepare_sample(
                 batch_class_logits[index],
                 batch_xy[index],
-                active_masks[index],
                 target,
                 mean_xy,
                 std_xy,
@@ -511,7 +507,7 @@ def train_probe(
             )
             losses.append(loss)
         if not losses:
-            raise RuntimeError("No active object slot was available for this batch.")
+            raise RuntimeError("No object target was available for this batch.")
 
         loss = torch.stack(losses).mean()
         optimizer.zero_grad(set_to_none=True)

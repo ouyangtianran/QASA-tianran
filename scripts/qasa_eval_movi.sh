@@ -25,13 +25,8 @@ nohup python qasa_eval.py \
   --train_permutations random \
   --eval_permutations all \
   --livis False \
-  --use_conditional_slot_pruning \
-  --gate_layers all \
-  --cov_rho 0.8 \
-  --cov_tau 0.8 \
-  --cov_novelty_alpha 0.3 \
   --pre_argmax_slot_maxnorm False \
-  --eval_gate_slots_attn True \
+  --eval_gate_slots_attn False \
   >"$LOG_FILE" 2>&1 &
 
 echo "Evaluation started: pid=$! log=$LOG_FILE"
